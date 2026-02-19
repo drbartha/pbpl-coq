@@ -1,0 +1,20 @@
+# Coq compiled outputs
+*.vo
+*.vok
+*.vos
+*.glob
+*.aux
+
+# Generated Makefile
+Makefile.coq
+Makefile.coq.bak
+Makefile.coq.conf
+
+# Coq native compilation
+.coq-native/
+
+# Editor/IDE
+*.swp
+*~
+.vscode/
+.idea/
