@@ -17,7 +17,7 @@ The proof has two layers:
 
 ### Flat-program theorem (`Simulation.v`)
 
-The abstract PBPL machine — a flat list of labeled statements — simulates any Minsky machine:
+The abstract PBPL machine (a flat list of labeled statements) simulates any Minsky machine:
 
 ```coq
 Theorem pbpl_turing_complete :
@@ -33,7 +33,7 @@ Theorem pbpl_turing_complete :
 
 ### Brick-tree theorem (`BrickSemantics.v`)
 
-The mathematical PBPL machine — where each labeled instruction is an explicit brick subtree — also simulates any Minsky machine. This theorem closes the gap between the physical brick model and the flat-program semantics:
+The mathematical PBPL machine, where each labeled instruction is an explicit brick subtree, also simulates any Minsky machine. This theorem closes the gap between the physical brick model and the flat-program semantics:
 
 ```coq
 Theorem pbpl_machine_tc :
