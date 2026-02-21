@@ -13,9 +13,11 @@ We prove **Turing-completeness of PBPL** by showing it can simulate any **2-coun
 The proof has two layers:
 
 1. **Physical layer**: The compiled program is representable as a valid brick tree satisfying all physical hardware constraints (`wf_tree`).
-2. **Semantic layer**: The small-step operational semantics of the flat PBPL program faithfully simulate every step of the Minsky machine (forward simulation).
+2. **Semantic layer**: The small-step operational semantics faithfully simulate every step of the Minsky machine (forward simulation).
 
-The top-level theorem:
+### Flat-program theorem (`Simulation.v`)
+
+The abstract PBPL machine — a flat list of labeled statements — simulates any Minsky machine:
 
 ```coq
 Theorem pbpl_turing_complete :
@@ -23,13 +25,28 @@ Theorem pbpl_turing_complete :
     wf_tree (compile_tree mp) /\
     (forall mc1 mc2,
       minsky_step mp mc1 mc2 ->
-      forall pc1, match_config mp mc1 pc1 ->
+      forall pc1, match_config mc1 pc1 ->
       exists pc2,
         star (step (compile mp)) pc1 pc2 /\
-        match_config mp mc2 pc2).
+        match_config mc2 pc2).
 ```
 
-`Print Assumptions pbpl_turing_complete` returns **"Closed under the global context"**: no axioms beyond Coq's built-in logic are used.
+### Brick-tree theorem (`BrickSemantics.v`)
+
+The mathematical PBPL machine — where each labeled instruction is an explicit brick subtree — also simulates any Minsky machine. This theorem closes the gap between the physical brick model and the flat-program semantics:
+
+```coq
+Theorem pbpl_machine_tc :
+  forall (mp : minsky_program),
+    (forall mc1 mc2,
+      minsky_step mp mc1 mc2 ->
+      forall pc1, match_config mc1 pc1 ->
+      exists pc2,
+        star (bt_step (compile_btree mp)) pc1 pc2 /\
+        match_config mc2 pc2).
+```
+
+Both theorems return **"Closed under the global context"** under `Print Assumptions`: no axioms beyond Coq's built-in logic are used.
 
 ## File structure
 
@@ -41,6 +58,7 @@ Theorem pbpl_turing_complete :
 | `Minsky.v` | 2-counter Minsky machine (`minsky_step`) |
 | `Compile.v` | Compiler `compile : minsky_program → program`, fetch correctness lemmas |
 | `Simulation.v` | Forward simulation proof + `pbpl_turing_complete` |
+| `BrickSemantics.v` | Brick-tree machine (`bt_step`, `compile_btree`, `eval_tree`) + `pbpl_machine_tc` |
 
 ## Label scheme
 
@@ -64,9 +82,13 @@ sudo apt install coq
 # Build
 make
 
-# Verify no axioms
-coqc -Q . PBPL -require PBPL.Simulation \
-  <<< 'Print Assumptions pbpl_turing_complete.'
+# Verify no axioms (flat-program theorem)
+echo 'Require Import PBPL.Simulation. Print Assumptions pbpl_turing_complete.' \
+  > /tmp/chk.v && coqc -Q . PBPL /tmp/chk.v
+
+# Verify no axioms (brick-tree theorem)
+echo 'Require Import PBPL.BrickSemantics. Print Assumptions pbpl_machine_tc.' \
+  > /tmp/chk.v && coqc -Q . PBPL /tmp/chk.v
 ```
 
 ## About BrixIT
