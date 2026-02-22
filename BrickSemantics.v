@@ -285,7 +285,7 @@ Proof.
       * rewrite update_neq by discriminate. exact Ha.
       * rewrite update_eq. rewrite Hb. lia.
 
-  (* Case 3: DEC C1 nonzero — two bt_steps: IF-false then DEC *)
+  (* Case 3: DEC C1 nonzero - two bt_steps: IF-false then DEC *)
   - destruct Hmatch as [Hl [Ha Hb]]. subst l.
     pose proof (bt_fetch_compile_btree_if mp _ _ _ _ H) as Hfetch_if.
     pose proof (bt_fetch_compile_btree_dec mp _ _ _ _ H) as Hfetch_dec.
@@ -304,7 +304,7 @@ Proof.
       * rewrite update_eq. rewrite Ha. lia.
       * rewrite update_neq by discriminate. exact Hb.
 
-  (* Case 4: DEC C1 zero — one bt_step: IF-true *)
+  (* Case 4: DEC C1 zero - one bt_step: IF-true *)
   - destruct Hmatch as [Hl [Ha Hb]]. subst l.
     pose proof (bt_fetch_compile_btree_if mp _ _ _ _ H) as Hfetch_if.
     exists (2 * next_z, s).
@@ -316,7 +316,7 @@ Proof.
       * exfalso. apply Hne. rewrite Ha. reflexivity.
     + unfold match_config. split; [lia|]. split; assumption.
 
-  (* Case 5: DEC C2 nonzero — two bt_steps: IF-false then DEC *)
+  (* Case 5: DEC C2 nonzero - two bt_steps: IF-false then DEC *)
   - destruct Hmatch as [Hl [Ha Hb]]. subst l.
     pose proof (bt_fetch_compile_btree_if mp _ _ _ _ H) as Hfetch_if.
     pose proof (bt_fetch_compile_btree_dec mp _ _ _ _ H) as Hfetch_dec.
@@ -335,7 +335,7 @@ Proof.
       * rewrite update_neq by discriminate. exact Ha.
       * rewrite update_eq. rewrite Hb. lia.
 
-  (* Case 6: DEC C2 zero — one bt_step: IF-true *)
+  (* Case 6: DEC C2 zero - one bt_step: IF-true *)
   - destruct Hmatch as [Hl [Ha Hb]]. subst l.
     pose proof (bt_fetch_compile_btree_if mp _ _ _ _ H) as Hfetch_if.
     exists (2 * next_z, s).
@@ -361,4 +361,269 @@ Theorem pbpl_machine_tc :
 Proof.
   intros mp mc1 mc2 Hmstep pc1 Hmatch.
   eapply simulate_bt_step; eassumption.
+Qed.
+
+(** ** Well-formedness of compiled btree entries *)
+
+Lemma compile_instr_btree_wf : forall i instr l t,
+  In (l, t) (compile_instr_btree i instr) -> wf_tree t.
+Proof.
+  intros i instr l t Hin.
+  destruct instr as [c next | c next_nz next_z |]; simpl in Hin.
+  - destruct Hin as [H | []]. injection H; intros; subst. repeat constructor.
+  - destruct Hin as [H | [H | []]]; injection H; intros; subst.
+    + apply wf_if.
+      * apply expr_leaf. destruct c; exact I.
+      * apply cmp_leaf. exact I.
+      * apply expr_leaf. exact I.
+      * repeat constructor.
+      * repeat constructor.
+    + repeat constructor.
+  - destruct Hin as [H | []]. injection H; intros; subst. constructor.
+Qed.
+
+Lemma compile_btree_aux_entries_wf : forall mp j l t,
+  In (l, t) (compile_btree_aux j mp) -> wf_tree t.
+Proof.
+  induction mp as [|instr rest IH]; intros j l t Hin.
+  - contradiction.
+  - simpl in Hin. apply in_app_or in Hin. destruct Hin as [H | H].
+    + eapply compile_instr_btree_wf. exact H.
+    + eapply IH. exact H.
+Qed.
+
+Lemma compile_btree_entries_wf : forall mp l t,
+  In (l, t) (compile_btree mp) -> wf_tree t.
+Proof.
+  intros mp l t Hin.
+  unfold compile_btree in Hin. eapply compile_btree_aux_entries_wf. exact Hin.
+Qed.
+
+(** ** Bridge theorem: bt_step <--> step *)
+
+(** bt_fetch success implies list membership *)
+Lemma bt_fetch_gives_In : forall bp l t,
+  bt_fetch bp l = Some t -> In (l, t) bp.
+Proof.
+  induction bp as [|[l' t'] rest IH]; intros l t H.
+  - discriminate.
+  - simpl in H. destruct (Nat.eqb l l') eqn:E.
+    + apply Nat.eqb_eq in E. injection H; intros; subst. left. reflexivity.
+    + right. apply IH. exact H.
+Qed.
+
+(** fetch success implies list membership *)
+Lemma fetch_gives_In : forall P l stmt,
+  fetch P l = Some stmt -> In (l, stmt) P.
+Proof.
+  induction P as [|[l' s'] rest IH]; intros l stmt H.
+  - discriminate.
+  - simpl in H. destruct (Nat.eqb l l') eqn:E.
+    + apply Nat.eqb_eq in E. injection H; intros; subst. left. reflexivity.
+    + right. apply IH. exact H.
+Qed.
+
+(** Any entry in compile_btree_aux comes from a specific instruction *)
+Lemma compile_btree_aux_In_inv : forall mp j l t,
+  In (l, t) (compile_btree_aux j mp) ->
+  exists i instr,
+    nth_error mp i = Some instr /\
+    In (l, t) (compile_instr_btree (j + i) instr).
+Proof.
+  induction mp as [|instr rest IH]; intros j l t Hin.
+  - contradiction.
+  - simpl in Hin. apply in_app_or in Hin. destruct Hin as [H | H].
+    + exists 0, instr. rewrite Nat.add_0_r. split; [reflexivity | exact H].
+    + destruct (IH (S j) l t H) as [i' [instr' [Hnth Hmem]]].
+      exists (S i'), instr'. split.
+      * exact Hnth.
+      * replace (j + S i') with (S j + i') by lia. exact Hmem.
+Qed.
+
+(** Any entry in compile_aux comes from a specific instruction *)
+Lemma compile_aux_In_inv : forall mp j l stmt,
+  In (l, stmt) (compile_aux j mp) ->
+  exists i instr,
+    nth_error mp i = Some instr /\
+    In (l, stmt) (compile_instr (j + i) instr).
+Proof.
+  induction mp as [|instr rest IH]; intros j l stmt Hin.
+  - contradiction.
+  - simpl in Hin. apply in_app_or in Hin. destruct Hin as [H | H].
+    + exists 0, instr. rewrite Nat.add_0_r. split; [reflexivity | exact H].
+    + destruct (IH (S j) l stmt H) as [i' [instr' [Hnth Hmem]]].
+      exists (S i'), instr'. split.
+      * exact Hnth.
+      * replace (j + S i') with (S j + i') by lia. exact Hmem.
+Qed.
+
+(** Shape characterization for btree entries *)
+Lemma compile_instr_btree_In_shapes : forall i instr l t,
+  In (l, t) (compile_instr_btree i instr) ->
+  match instr with
+  | MInc c next =>
+      l = 2*i /\
+      t = BTNode TInc (BTNode (TVar (counter_var c))
+            (BTNode TSemi (BTNode TGoto (BTLeaf (TNum (2*next))))))
+  | MDec c next_nz next_z =>
+      (l = 2*i /\
+       t = BTIf (BTLeaf (TVar (counter_var c))) (BTLeaf TCmpEq) (BTLeaf (TNum 0))
+                (BTNode TGoto (BTLeaf (TNum (2*next_z))))
+                (BTNode TGoto (BTLeaf (TNum (2*i+1))))) \/
+      (l = 2*i+1 /\
+       t = BTNode TDec (BTNode (TVar (counter_var c))
+              (BTNode TSemi (BTNode TGoto (BTLeaf (TNum (2*next_nz)))))))
+  | MHalt => l = 2*i /\ t = BTLeaf THalt
+  end.
+Proof.
+  intros i instr l t Hin.
+  destruct instr as [c next | c next_nz next_z |]; simpl in Hin.
+  - destruct Hin as [H | []]. injection H; intros; subst. split; reflexivity.
+  - destruct Hin as [H | [H | []]].
+    + injection H; intros; subst. left. split; reflexivity.
+    + injection H; intros; subst. right. split; reflexivity.
+  - destruct Hin as [H | []]. injection H; intros; subst. split; reflexivity.
+Qed.
+
+(** Shape characterization for flat program entries *)
+Lemma compile_instr_In_shapes : forall i instr l stmt,
+  In (l, stmt) (compile_instr i instr) ->
+  match instr with
+  | MInc c next =>
+      l = 2*i /\ stmt = SInc (counter_var c) (2*next)
+  | MDec c next_nz next_z =>
+      (l = 2*i /\
+       stmt = SIf (EVar (counter_var c)) CmpEq (ENum 0%Z) (2*next_z) (2*i+1)) \/
+      (l = 2*i+1 /\ stmt = SDec (counter_var c) (2*next_nz))
+  | MHalt => l = 2*i /\ stmt = SHalt
+  end.
+Proof.
+  intros i instr l stmt Hin.
+  destruct instr as [c next | c next_nz next_z |]; simpl in Hin.
+  - destruct Hin as [H | []]. injection H; intros; subst. split; reflexivity.
+  - destruct Hin as [H | [H | []]].
+    + injection H; intros; subst. left. split; reflexivity.
+    + injection H; intros; subst. right. split; reflexivity.
+  - destruct Hin as [H | []]. injection H; intros; subst. split; reflexivity.
+Qed.
+
+(** ** Formal bridge: bt_step <--> step *)
+
+Theorem compile_btree_correct : forall mp l s l' s',
+  bt_step (compile_btree mp) (l, s) (l', s') <->
+  step (compile mp) (l, s) (l', s').
+Proof.
+  intros mp l s l' s'. split.
+
+  (** Forward: bt_step → step *)
+  - intro Hbt.
+    inversion Hbt as [? ? t ? ? Hfetch Heval]. subst.
+    apply bt_fetch_gives_In in Hfetch.
+    unfold compile_btree in Hfetch.
+    apply compile_btree_aux_In_inv in Hfetch.
+    destruct Hfetch as [i [instr [Hnth Hmem]]].
+    rewrite Nat.add_0_l in Hmem.
+    apply compile_instr_btree_In_shapes in Hmem.
+    destruct instr as [c next | c next_nz next_z |].
+    + (* MInc *)
+      destruct Hmem as [Hl Ht]. subst l t.
+      simpl in Heval. injection Heval; intros; subst.
+      apply step_inc. apply fetch_compile_inc. exact Hnth.
+    + (* MDec *)
+      destruct Hmem as [[Hl Ht] | [Hl Ht]].
+      * subst l t. unfold eval_tree in Heval.
+        destruct (Z.eqb_spec (s (counter_var c)) 0%Z) as [Heq | Hne].
+        -- injection Heval; intros; subst.
+           eapply step_if_true. eapply fetch_compile_if. exact Hnth. simpl. exact Heq.
+        -- injection Heval; intros; subst.
+           eapply step_if_false. eapply fetch_compile_if. exact Hnth. simpl. exact Hne.
+      * subst l t. simpl in Heval. injection Heval; intros; subst.
+        apply step_dec. eapply fetch_compile_dec. exact Hnth.
+    + (* MHalt: eval_tree returns None, contradiction *)
+      destruct Hmem as [Hl Ht]. subst l t. simpl in Heval. discriminate.
+
+  (** Backward: step → bt_step.
+      Use match goal per case to find the fetch hypothesis regardless of Coq's naming. *)
+  - intro Hstep.
+    inversion Hstep; subst.
+    + (* step_inc *)
+      match goal with Hf : fetch _ _ = Some _ |- _ =>
+        apply fetch_gives_In in Hf; unfold compile in Hf;
+        apply compile_aux_In_inv in Hf;
+        destruct Hf as [? [instr [Hnth Hmem]]];
+        rewrite Nat.add_0_l in Hmem;
+        apply compile_instr_In_shapes in Hmem
+      end.
+      destruct instr as [c next | c next_nz next_z |].
+      * destruct Hmem as [? Hstmt]. injection Hstmt; intros; subst.
+        econstructor. apply bt_fetch_compile_btree_inc. exact Hnth. reflexivity.
+      * destruct Hmem as [[? Hstmt] | [? Hstmt]]; discriminate.
+      * destruct Hmem as [? Hstmt]. discriminate.
+    + (* step_dec *)
+      match goal with Hf : fetch _ _ = Some _ |- _ =>
+        apply fetch_gives_In in Hf; unfold compile in Hf;
+        apply compile_aux_In_inv in Hf;
+        destruct Hf as [? [instr [Hnth Hmem]]];
+        rewrite Nat.add_0_l in Hmem;
+        apply compile_instr_In_shapes in Hmem
+      end.
+      destruct instr as [c next | c next_nz next_z |].
+      * destruct Hmem as [? Hstmt]. discriminate.
+      * destruct Hmem as [[? Hstmt] | [? Hstmt]].
+        -- discriminate.
+        -- injection Hstmt; intros; subst.
+           econstructor. eapply bt_fetch_compile_btree_dec. exact Hnth. reflexivity.
+      * destruct Hmem as [? Hstmt]. discriminate.
+    + (* step_if_true: condition holds, result is true-branch label *)
+      match goal with Hf : fetch _ _ = Some _ |- _ =>
+        apply fetch_gives_In in Hf; unfold compile in Hf;
+        apply compile_aux_In_inv in Hf;
+        destruct Hf as [? [instr [Hnth Hmem]]];
+        rewrite Nat.add_0_l in Hmem;
+        apply compile_instr_In_shapes in Hmem
+      end.
+      destruct instr as [c next | c next_nz next_z |].
+      * destruct Hmem as [? ?]. discriminate.
+      * destruct Hmem as [[? ?] | [? ?]].
+        -- (* MDec IF entry: use eval hypothesis to prove Z.eqb true *)
+           econstructor; [eapply bt_fetch_compile_btree_if; exact Hnth |].
+           unfold eval_tree.
+           match goal with He : eval_expr _ _ = eval_expr _ _ |- _ =>
+             simpl in He; apply Z.eqb_eq in He; rewrite He
+           end.
+           reflexivity.
+        -- discriminate.
+      * destruct Hmem as [? ?]. discriminate.
+    + (* step_if_false: condition fails, result is false-branch label *)
+      match goal with Hf : fetch _ _ = Some _ |- _ =>
+        apply fetch_gives_In in Hf; unfold compile in Hf;
+        apply compile_aux_In_inv in Hf;
+        destruct Hf as [? [instr [Hnth Hmem]]];
+        rewrite Nat.add_0_l in Hmem;
+        apply compile_instr_In_shapes in Hmem
+      end.
+      destruct instr as [c next | c next_nz next_z |].
+      * destruct Hmem as [? ?]. discriminate.
+      * destruct Hmem as [[? ?] | [? ?]].
+        -- (* MDec IF entry: use eval hypothesis to prove Z.eqb false *)
+           econstructor; [eapply bt_fetch_compile_btree_if; exact Hnth |].
+           unfold eval_tree.
+           match goal with He : eval_expr _ _ <> eval_expr _ _ |- _ =>
+             simpl in He; apply Z.eqb_neq in He; rewrite He
+           end.
+           reflexivity.
+        -- discriminate.
+      * destruct Hmem as [? ?]. discriminate.
+    + (* step_goto: impossible - no SGoto in compiled programs *)
+      match goal with Hf : fetch _ _ = Some _ |- _ =>
+        apply fetch_gives_In in Hf; unfold compile in Hf;
+        apply compile_aux_In_inv in Hf;
+        destruct Hf as [? [instr [Hnth Hmem]]];
+        rewrite Nat.add_0_l in Hmem;
+        apply compile_instr_In_shapes in Hmem
+      end.
+      destruct instr as [c next | c next_nz next_z |].
+      * destruct Hmem as [? Hstmt]. discriminate.
+      * destruct Hmem as [[? Hstmt] | [? Hstmt]]; discriminate.
+      * destruct Hmem as [? Hstmt]. discriminate.
 Qed.

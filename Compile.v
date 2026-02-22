@@ -132,7 +132,7 @@ Proof.
   unfold fetch. rewrite (proj2 (Nat.eqb_neq _ _) Hne_aux). reflexivity.
 Qed.
 
-(** ** Key fetch lemmas — proved by induction on mp *)
+(** ** Key fetch lemmas - proved by induction on mp *)
 
 (** The step case tactic: skip past compile_instr j a *)
 Ltac skip_instr :=
