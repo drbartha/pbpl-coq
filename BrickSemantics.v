@@ -251,7 +251,7 @@ Proof.
   eapply bt_fetch_compile_btree_aux_dec. exact H.
 Qed.
 
-(** ** Forward simulation: one Minsky step → one or more bt_steps *)
+(** ** Forward simulation: one Minsky step --> one or more bt_steps *)
 
 Theorem simulate_bt_step :
   forall (mp : minsky_program) (mc1 mc2 : minsky_config),
@@ -515,7 +515,7 @@ Theorem compile_btree_correct : forall mp l s l' s',
 Proof.
   intros mp l s l' s'. split.
 
-  (** Forward: bt_step → step *)
+  (** Forward: bt_step --> step *)
   - intro Hbt.
     inversion Hbt as [? ? t ? ? Hfetch Heval]. subst.
     apply bt_fetch_gives_In in Hfetch.
@@ -542,7 +542,7 @@ Proof.
     + (* MHalt: eval_tree returns None, contradiction *)
       destruct Hmem as [Hl Ht]. subst l t. simpl in Heval. discriminate.
 
-  (** Backward: step → bt_step.
+  (** Backward: step --> bt_step.
       Use match goal per case to find the fetch hypothesis regardless of Coq's naming. *)
   - intro Hstep.
     inversion Hstep; subst.
@@ -584,8 +584,9 @@ Proof.
       end.
       destruct instr as [c next | c next_nz next_z |].
       * destruct Hmem as [? ?]. discriminate.
-      * destruct Hmem as [[? ?] | [? ?]].
-        -- (* MDec IF entry: use eval hypothesis to prove Z.eqb true *)
+      * destruct Hmem as [[Hl Hstmt] | [Hl Hstmt]].
+        -- (* MDec IF entry: injection grounds e1/e2/l', subst also eliminates l *)
+           injection Hstmt; intros; subst.
            econstructor; [eapply bt_fetch_compile_btree_if; exact Hnth |].
            unfold eval_tree.
            match goal with He : eval_expr _ _ = eval_expr _ _ |- _ =>
@@ -593,7 +594,7 @@ Proof.
            end.
            reflexivity.
         -- discriminate.
-      * destruct Hmem as [? ?]. discriminate.
+      * destruct Hmem as [Hl Hstmt]. discriminate.
     + (* step_if_false: condition fails, result is false-branch label *)
       match goal with Hf : fetch _ _ = Some _ |- _ =>
         apply fetch_gives_In in Hf; unfold compile in Hf;
@@ -603,9 +604,10 @@ Proof.
         apply compile_instr_In_shapes in Hmem
       end.
       destruct instr as [c next | c next_nz next_z |].
-      * destruct Hmem as [? ?]. discriminate.
-      * destruct Hmem as [[? ?] | [? ?]].
-        -- (* MDec IF entry: use eval hypothesis to prove Z.eqb false *)
+      * destruct Hmem as [Hl Hstmt]. discriminate.
+      * destruct Hmem as [[Hl Hstmt] | [Hl Hstmt]].
+        -- (* MDec IF entry: injection grounds e1/e2/l', subst also eliminates l *)
+           injection Hstmt; intros; subst.
            econstructor; [eapply bt_fetch_compile_btree_if; exact Hnth |].
            unfold eval_tree.
            match goal with He : eval_expr _ _ <> eval_expr _ _ |- _ =>
@@ -613,7 +615,7 @@ Proof.
            end.
            reflexivity.
         -- discriminate.
-      * destruct Hmem as [? ?]. discriminate.
+      * destruct Hmem as [Hl Hstmt]. discriminate.
     + (* step_goto: impossible - no SGoto in compiled programs *)
       match goal with Hf : fetch _ _ = Some _ |- _ =>
         apply fetch_gives_In in Hf; unfold compile in Hf;
@@ -626,4 +628,62 @@ Proof.
       * destruct Hmem as [? Hstmt]. discriminate.
       * destruct Hmem as [[? Hstmt] | [? Hstmt]]; discriminate.
       * destruct Hmem as [? Hstmt]. discriminate.
+Qed.
+
+(** ** BrickTree <--> physical token sequence consistency
+
+    [eval_tokens] is the ground-truth physical model: it evaluates the flat
+    token list that a daisy-chained brick row produces, matching exactly the
+    four instruction shapes the physical hardware supports.
+
+    [eval_tree_tokens_agree] proves that the mathematical tree model and the
+    physical token model agree on every tree that the compiler produces —
+    closing the gap the reviewer identified between "PBPL Turing-completeness"
+    and "physical bricks Turing-completeness".
+
+    (The theorem cannot be stated for ALL brick_trees because [flatten] is not
+    injective: a [BTNode TIf child] can produce the same token list as a
+    [BTIf], yet [eval_tree] returns [None] on the former while [eval_tokens]
+    would return [Some].  Restricting to compiled trees avoids this.) *)
+
+Definition eval_tokens (toks : list token) (s : store) : option (label * store) :=
+  match toks with
+  | [TInc; TVar v; TSemi; TGoto; TNum l] =>
+      Some (l, update s v (s v + 1)%Z)
+  | [TDec; TVar v; TSemi; TGoto; TNum l] =>
+      Some (l, update s v (s v - 1)%Z)
+  | [TIf; TVar v; TCmpEq; TNum 0; TSemi;
+     TGoto; TNum lt; TIfSep;
+     TGoto; TNum lf; TIfSep] =>
+      if Z.eqb (s v) 0%Z then Some (lt, s) else Some (lf, s)
+  | [THalt] => None
+  | _ => None
+  end.
+
+(** For every instruction tree produced by [compile_instr_btree],
+    [eval_tree] and [eval_tokens . flatten] agree. *)
+Lemma eval_tree_tokens_agree : forall i instr s l t,
+  In (l, t) (compile_instr_btree i instr) ->
+  eval_tree t s = eval_tokens (flatten t) s.
+Proof.
+  intros i instr s l t Hin.
+  destruct instr as [c next | c next_nz next_z |]; simpl in Hin.
+  - destruct Hin as [H | []]. injection H; intros; subst t. reflexivity.
+  - destruct Hin as [H | [H | []]].
+    + injection H; intros; subst t. reflexivity.
+    + injection H; intros; subst t. reflexivity.
+  - destruct Hin as [H | []]. injection H; intros; subst t. reflexivity.
+Qed.
+
+(** Lift to the full compiled program. *)
+Corollary compile_btree_tokens_agree : forall mp l t s,
+  In (l, t) (compile_btree mp) ->
+  eval_tree t s = eval_tokens (flatten t) s.
+Proof.
+  intros mp l t s Hin.
+  unfold compile_btree in Hin.
+  apply compile_btree_aux_In_inv in Hin.
+  destruct Hin as [i [instr [Hnth Hmem]]].
+  rewrite Nat.add_0_l in Hmem.
+  eapply eval_tree_tokens_agree. exact Hmem.
 Qed.
