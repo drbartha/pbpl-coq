@@ -140,6 +140,10 @@ EOF
 coqc -Q . PBPL /tmp/chk.v
 ```
 
+## LaTeX proof guide (pedagogical PDF)
+
+A segment-by-segment guide to every module (Coq syntax, mathematical reading, proof sketches, TikZ figures, advisor feedback on bricks vs tokens) lives in [doc/pbpl-proof-guide/](doc/pbpl-proof-guide/). Build with `pdflatex` from that directory; see [doc/pbpl-proof-guide/README.md](doc/pbpl-proof-guide/README.md).
+
 ## About DrBartha
 
 DrBartha Toys is an educational toy designed to teach programming to children through physical block coding and interactive play. Visit [drbartha.com](https://www.drbartha.com/) to learn more.

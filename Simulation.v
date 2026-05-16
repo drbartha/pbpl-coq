@@ -14,7 +14,7 @@ Definition match_config (mc : minsky_config) (pc : config) : Prop :=
   s VarA = Z.of_nat c1 /\
   s VarB = Z.of_nat c2.
 
-(** ** Forward simulation: one Minsky step → one or more PBPL steps *)
+(** ** Forward simulation: one Minsky step -> one or more PBPL steps *)
 
 Theorem simulate_step :
   forall (mp : minsky_program) (mc1 mc2 : minsky_config),

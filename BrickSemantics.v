@@ -637,7 +637,7 @@ Qed.
     four instruction shapes the physical hardware supports.
 
     [eval_tree_tokens_agree] proves that the mathematical tree model and the
-    physical token model agree on every tree that the compiler produces —
+    physical token model agree on every tree that the compiler produces -
     closing the gap the reviewer identified between "PBPL Turing-completeness"
     and "physical bricks Turing-completeness".
 

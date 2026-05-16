@@ -1,4 +1,4 @@
-(** * Compile: Minsky machine → Brick Tree → PBPL program *)
+(** * Compile: Minsky machine -> Brick Tree -> PBPL program *)
 
 Require Import ZArith List Arith Lia.
 Require Import PBPL.Util PBPL.BrickTree PBPL.PBPL PBPL.Minsky.
@@ -14,7 +14,7 @@ Definition counter_var (c : counter) : var :=
   end.
 
 (** ** Compile a single Minsky instruction to PBPL statements.
-    Label scheme: instruction i → main label 2*i, aux label 2*i+1 *)
+    Label scheme: instruction i -> main label 2*i, aux label 2*i+1 *)
 
 Definition compile_instr (i : nat) (instr : minsky_instr) : list (label * stmt) :=
   match instr with
